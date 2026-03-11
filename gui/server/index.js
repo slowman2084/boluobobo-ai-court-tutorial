@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -18,17 +18,60 @@ const PORT = 18790;
 
 const AUTH_TOKEN = process.env.BOLUO_AUTH_TOKEN || '';
 
-const AGENT_DEPT_MAP = {
-  'main': '司礼监', 'gongbu': '工部', 'hubu': '户部', 'libu': '吏部',
-  'xingbu': '刑部', 'bingbu': '兵部', 'libu2': '礼部',
-  'neige': '内阁', 'duchayuan': '都察院', 'neiwufu': '内务府',
-  'hanlinyuan': '翰林院', 'taiyiyuan': '太医院', 'guozijian': '国子监',
-  'yushanfang': '御膳房'
+const AGENT_META = {
+  'main': { displayName: '掌印总管', group: 'inner_court', groupLabel: '内廷', order: 10 },
+  'qijuzhu': { displayName: '起居注官', group: 'inner_court', groupLabel: '内廷', order: 20 },
+  'tingyi': { displayName: '廷议官', group: 'inner_court', groupLabel: '内廷', order: 30 },
+  'bingbu': { displayName: '兵部', group: 'ministry', groupLabel: '六部', order: 110 },
+  'gongbu': { displayName: '工部', group: 'ministry', groupLabel: '六部', order: 120 },
+  'hubu': { displayName: '户部', group: 'ministry', groupLabel: '六部', order: 130 },
+  'libu': { displayName: '礼部', group: 'ministry', groupLabel: '六部', order: 140 },
+  'libu2': { displayName: '吏部', group: 'ministry', groupLabel: '六部', order: 150 },
+  'xingbu': { displayName: '刑部', group: 'ministry', groupLabel: '六部', order: 160 },
+  'neiwufu': { displayName: '内务府', group: 'leisure', groupLabel: '后宫/生活机构', order: 210 },
+  'yushanfang': { displayName: '御膳房', group: 'leisure', groupLabel: '后宫/生活机构', order: 220 },
+  'huagong': { displayName: '画宫司', group: 'leisure', groupLabel: '后宫/生活机构', order: 230 },
+  'jiaofangsi': { displayName: '教坊司', group: 'leisure', groupLabel: '后宫/生活机构', order: 240 },
+  'hanlinyuan': { displayName: '翰林院', group: 'leisure', groupLabel: '后宫/生活机构', order: 250 },
+  'neige': { displayName: '内阁', group: 'legacy', groupLabel: '旧架构', order: 910 },
+  'duchayuan': { displayName: '都察院', group: 'legacy', groupLabel: '旧架构', order: 920 },
+  'taiyiyuan': { displayName: '太医院', group: 'legacy', groupLabel: '旧架构', order: 930 },
+  'guozijian': { displayName: '国子监', group: 'legacy', groupLabel: '旧架构', order: 940 }
 };
+
+function getAgentMeta(agentId) {
+  return AGENT_META[agentId] || {
+    displayName: agentId,
+    group: 'other',
+    groupLabel: '未分组',
+    order: 999
+  };
+}
+
+function getAgentDisplayName(agentId) {
+  return getAgentMeta(agentId).displayName;
+}
+
+function getAgentIdByDisplayName(displayName) {
+  return Object.entries(AGENT_META).find(([, meta]) => meta.displayName === displayName)?.[0] || null;
+}
+
+function getAgentConfig(config, agentId) {
+  const list = config?.agents?.list;
+  if (Array.isArray(list)) {
+    return list.find(agent => agent.id === agentId) || {};
+  }
+  if (list && typeof list === 'object') {
+    return list[agentId] || {};
+  }
+  return {};
+}
 
 const HOME = process.env.HOME || '/home/ubuntu';
 const AGENTS_DIR = join(HOME, '.openclaw/agents');
 const CONFIG_PATH = join(HOME, '.openclaw/openclaw.json');
+const CREATIVE_TASKS_PATH = join(HOME, '.openclaw/creative_tasks.json');
+const COURT_CHANNEL = '1474091579630293164';
 
 app.use(cors({ origin: ['https://gui.at2.one'] }));
 app.use(express.json());
@@ -118,7 +161,7 @@ function getRecentLogs(limit = 100) {
                   timestamp: new Date(file.mtime).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }),
                   level: 'info',
                   message: text,
-                  source: AGENT_DEPT_MAP[agentId] || agentId
+                  source: getAgentDisplayName(agentId)
                 });
               }
             } catch (e) { }
@@ -144,12 +187,16 @@ app.get('/api/status', authMiddleware, async (req, res) => {
 
   const botAccounts = agentIds.map(id => {
     const sessData = getAgentSessionData(id);
-    const agentConfig = config?.agents?.list?.[id] || {};
+    const agentConfig = getAgentConfig(config, id);
     const model = agentConfig?.model?.primary || sessData.model || defaultModel;
+    const meta = getAgentMeta(id);
 
     return {
       name: id,
-      displayName: AGENT_DEPT_MAP[id] || id,
+      displayName: meta.displayName,
+      category: meta.group,
+      categoryLabel: meta.groupLabel,
+      sortOrder: meta.order,
       status: 'online',
       model: model,
       sessions: sessData.sessions,
@@ -157,7 +204,7 @@ app.get('/api/status', authMiddleware, async (req, res) => {
       outputTokens: sessData.outputTokens,
       totalTokens: sessData.totalTokens,
     };
-  });
+  }).sort((a, b) => a.sortOrder - b.sortOrder);
 
   const totalSessions = botAccounts.reduce((s, b) => s + b.sessions, 0);
   const todayTokens = botAccounts.reduce((s, b) => s + b.totalTokens, 0);
@@ -214,11 +261,6 @@ app.get('/api/messages', authMiddleware, (req, res) => {
 });
 
 function getTokenStats() {
-  const deptMap = {
-    'gongbu': '工部', 'hubu': '户部', 'libu': '吏部', 
-    'xingbu': '刑部', 'bingbu': '兵部', 'libu2': '礼部'
-  };
-
   const byDepartment = [];
   let totalTokens = 0;
 
@@ -233,7 +275,7 @@ function getTokenStats() {
           for (const session of Object.values(sessions)) {
             deptTokens += (session.inputTokens || 0) + (session.outputTokens || 0);
           }
-          const deptName = deptMap[agentDir] || agentDir;
+          const deptName = getAgentDisplayName(agentDir);
           byDepartment.push({ department: deptName, tokens: deptTokens });
           totalTokens += deptTokens;
         } catch (e) { }
@@ -401,7 +443,7 @@ function buildSessionsData() {
             sessions.push({
               id: `agent:${agentId}:${sessionKey}`,
               agentId,
-              agentName: AGENT_DEPT_MAP[agentId] || agentId,
+              agentName: getAgentDisplayName(agentId),
               channel,
               updatedAt,
               createdAt: session.createdAt || 0,
@@ -428,6 +470,510 @@ function buildSessionsData() {
   return result;
 }
 
+function collectKnownAgentIds(config) {
+  const ids = new Set();
+
+  if (existsSync(AGENTS_DIR)) {
+    try {
+      readdirSync(AGENTS_DIR, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .forEach(d => ids.add(d.name));
+    } catch { }
+  }
+
+  const agentList = config?.agents?.list;
+  if (Array.isArray(agentList)) {
+    agentList.forEach(agent => {
+      if (agent?.id) ids.add(agent.id);
+    });
+  } else if (agentList && typeof agentList === 'object') {
+    Object.keys(agentList).forEach(id => ids.add(id));
+  }
+
+  const accounts = config?.channels?.discord?.accounts || {};
+  Object.keys(accounts).forEach(id => ids.add(id));
+
+  return Array.from(ids).sort((a, b) => getAgentMeta(a).order - getAgentMeta(b).order);
+}
+
+function getLatestAssistantPreview(agentId) {
+  try {
+    const sessPath = join(AGENTS_DIR, agentId, 'sessions', 'sessions.json');
+    if (!existsSync(sessPath)) return { text: '', updatedAt: 0 };
+
+    const sessionsData = JSON.parse(readFileSync(sessPath, 'utf-8'));
+    let bestFile = null;
+    let bestTime = 0;
+
+    for (const sess of Object.values(sessionsData)) {
+      if ((sess.updatedAt || 0) > bestTime && sess.sessionFile && existsSync(sess.sessionFile)) {
+        bestTime = sess.updatedAt || 0;
+        bestFile = sess.sessionFile;
+      }
+    }
+
+    if (!bestFile) return { text: '', updatedAt: bestTime };
+
+    const lines = readFileSync(bestFile, 'utf-8').split('\n').filter(l => l.trim());
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 30); i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (entry.type === 'message' && entry.message?.role === 'assistant') {
+          const content = entry.message.content;
+          const text = typeof content === 'string'
+            ? content
+            : Array.isArray(content)
+              ? content.map(x => x.text || '').join('')
+              : '';
+          if (text.trim()) {
+            return { text: text.substring(0, 120), updatedAt: entry.timestamp || bestTime };
+          }
+        }
+      } catch { }
+    }
+
+    return { text: '', updatedAt: bestTime };
+  } catch {
+    return { text: '', updatedAt: 0 };
+  }
+}
+
+const creativeTaskStore = {};
+
+function loadCreativeTasks() {
+  try {
+    if (existsSync(CREATIVE_TASKS_PATH)) {
+      const raw = JSON.parse(readFileSync(CREATIVE_TASKS_PATH, 'utf-8'));
+      const entries = raw.tasks || raw || [];
+      if (Array.isArray(entries)) {
+        for (const t of entries) {
+          if (t?.id) creativeTaskStore[t.id] = t;
+        }
+      } else if (entries && typeof entries === 'object') {
+        Object.assign(creativeTaskStore, entries);
+      }
+    }
+  } catch { }
+}
+
+function saveCreativeTasks() {
+  try {
+    const dir = join(HOME, '.openclaw');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const tasks = Object.values(creativeTaskStore).map(t => {
+      const { raw, ...rest } = t || {};
+      return rest;
+    });
+    writeFileSync(CREATIVE_TASKS_PATH, JSON.stringify({ tasks, updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
+  } catch { }
+}
+
+loadCreativeTasks();
+
+function createCreativeTaskId(prefix = 'creative') {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pickValue(obj, keys) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
+  }
+  return undefined;
+}
+
+function collectUrls(input, acc = new Set(), depth = 0) {
+  if (depth > 4 || input === null || input === undefined) return acc;
+  if (typeof input === 'string') {
+    if (/^https?:\/\//.test(input)) acc.add(input);
+    return acc;
+  }
+  if (Array.isArray(input)) {
+    for (const item of input) collectUrls(item, acc, depth + 1);
+    return acc;
+  }
+  if (typeof input === 'object') {
+    for (const value of Object.values(input)) collectUrls(value, acc, depth + 1);
+  }
+  return acc;
+}
+
+function normalizeTaskStatus(rawStatus) {
+  const value = String(rawStatus || '').toLowerCase();
+  if (!value) return 'submitted';
+  if (['success', 'succeeded', 'completed', 'done', 'finish', 'finished'].includes(value)) return 'completed';
+  if (['fail', 'failed', 'error', 'cancelled', 'canceled'].includes(value)) return 'failed';
+  if (['running', 'processing', 'in_progress', 'progress'].includes(value)) return 'running';
+  if (['queued', 'pending', 'waiting', 'submitted', 'created'].includes(value)) return 'queued';
+  return value;
+}
+
+function normalizeCreativeRemoteResponse(provider, mode, raw, fallbackRequest = {}) {
+  const root = raw || {};
+  const nested = root.data || root.result || root.output || {};
+  const remoteTaskId = pickValue(root, ['task_id', 'taskId', 'id']) || pickValue(nested, ['task_id', 'taskId', 'id']);
+  const rawStatus = pickValue(root, ['status', 'state']) || pickValue(nested, ['status', 'state']) || 'submitted';
+  const status = normalizeTaskStatus(rawStatus);
+  const urls = Array.from(collectUrls(raw)).slice(0, 10);
+  const summary = pickValue(root, ['message', 'summary', 'description']) || pickValue(nested, ['message', 'summary', 'description']) || '';
+
+  return {
+    provider,
+    mode,
+    remoteTaskId: remoteTaskId ? String(remoteTaskId) : '',
+    rawStatus: String(rawStatus || ''),
+    status,
+    summary,
+    outputs: {
+      urls,
+      primaryUrl: urls[0] || ''
+    },
+    raw,
+    request: fallbackRequest
+  };
+}
+
+async function parseJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { rawText: text };
+  }
+}
+
+function sanitizeCreativeRequest(mode, payload = {}) {
+  if (mode === 'music') {
+    return {
+      title: String(payload.title || '').trim(),
+      tags: String(payload.tags || '').trim(),
+      prompt: String(payload.prompt || '').trim(),
+      mv: String(payload.mv || 'chirp-v4').trim() || 'chirp-v4'
+    };
+  }
+
+  return {
+    prompt: String(payload.prompt || '').trim(),
+    aspect_ratio: String(payload.aspect_ratio || '16:9').trim() || '16:9',
+    seed: payload.seed !== undefined && payload.seed !== null && String(payload.seed).trim() !== ''
+      ? String(payload.seed).trim()
+      : ''
+  };
+}
+
+async function submitCreativeTask(mode, payload) {
+  if (!['music', 'video'].includes(mode)) {
+    throw new Error('Unsupported creative mode');
+  }
+
+  const request = sanitizeCreativeRequest(mode, payload);
+  if (!request.prompt) {
+    throw new Error(mode === 'music' ? '歌曲任务至少需要歌词或提示词' : '视频任务至少需要提示词');
+  }
+
+  const provider = mode === 'music' ? 'suno' : 'seeddance';
+  const baseUrl = provider === 'suno' ? process.env.SUNO_API_URL : process.env.SEEDDANCE_API_URL;
+  const apiKey = provider === 'suno' ? process.env.SUNO_KEY : process.env.SEEDDANCE_KEY;
+
+  if (!baseUrl || !apiKey) {
+    throw new Error(provider === 'suno' ? '未配置 Suno API 环境变量' : '未配置 SeedDance API 环境变量');
+  }
+
+  const endpoint = provider === 'suno'
+    ? `${baseUrl.replace(/\/$/, '')}/suno/submit/music`
+    : `${baseUrl.replace(/\/$/, '')}/task/jimeng/text2video`;
+
+  const body = provider === 'suno'
+    ? request
+    : {
+        prompt: request.prompt,
+        aspect_ratio: request.aspect_ratio,
+        ...(request.seed ? { seed: request.seed } : {})
+      };
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  const raw = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`${provider === 'suno' ? 'Suno' : 'SeedDance'} 提交失败: ${response.status}`);
+  }
+
+  const normalized = normalizeCreativeRemoteResponse(provider, mode, raw, request);
+  const localId = createCreativeTaskId(mode);
+  const nowIso = new Date().toISOString();
+
+  const record = {
+    id: localId,
+    agentId: 'jiaofangsi',
+    agentName: '教坊司',
+    provider,
+    mode,
+    request,
+    status: normalized.status,
+    rawStatus: normalized.rawStatus,
+    remoteTaskId: normalized.remoteTaskId,
+    summary: normalized.summary || (mode === 'music' ? `歌曲任务：${request.title || request.prompt.slice(0, 18)}` : `视频任务：${request.prompt.slice(0, 18)}`),
+    outputs: normalized.outputs,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    raw: normalized.raw
+  };
+
+  creativeTaskStore[localId] = record;
+  saveCreativeTasks();
+  return record;
+}
+
+async function refreshCreativeTask(task) {
+  if (!task?.remoteTaskId) return task;
+
+  const provider = task.provider;
+  const baseUrl = provider === 'suno' ? process.env.SUNO_API_URL : process.env.SEEDDANCE_API_URL;
+  const apiKey = provider === 'suno' ? process.env.SUNO_KEY : process.env.SEEDDANCE_KEY;
+  if (!baseUrl || !apiKey) return task;
+
+  const endpoint = provider === 'suno'
+    ? `${baseUrl.replace(/\/$/, '')}/suno/fetch/${task.remoteTaskId}`
+    : `${baseUrl.replace(/\/$/, '')}/task/${task.remoteTaskId}`;
+
+  const response = await fetch(endpoint, {
+    headers: { 'Authorization': `Bearer ${apiKey}` }
+  });
+  const raw = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`${provider === 'suno' ? 'Suno' : 'SeedDance'} 查询失败: ${response.status}`);
+  }
+
+  const normalized = normalizeCreativeRemoteResponse(provider, task.mode, raw, task.request);
+  const nextRecord = {
+    ...task,
+    status: normalized.status || task.status,
+    rawStatus: normalized.rawStatus || task.rawStatus,
+    summary: normalized.summary || task.summary,
+    outputs: normalized.outputs?.urls?.length ? normalized.outputs : task.outputs,
+    updatedAt: new Date().toISOString(),
+    raw: normalized.raw
+  };
+
+  creativeTaskStore[task.id] = nextRecord;
+  saveCreativeTasks();
+  return nextRecord;
+}
+
+function getCreativeStudioData() {
+  const cached = getCached('creative_studio');
+  if (cached) return cached;
+
+  const now = Date.now();
+  const lineDefs = [
+    {
+      id: 'huagong',
+      name: '画宫司',
+      lineLabel: '视觉产线',
+      type: 'visual',
+      capabilities: ['宫廷角色图', '古风娱乐海报', '设定参考图'],
+      command: '给我准备一组宫廷风角色图，先整理风格、服饰、镜头和场景，再开始生成',
+      integrations: [
+        { id: 'baoyu-skills', label: 'baoyu-skills', enabled: true, note: '适合接生图与轻视觉内容' }
+      ]
+    },
+    {
+      id: 'jiaofangsi',
+      name: '教坊司',
+      lineLabel: '声画娱乐产线',
+      type: 'entertainment',
+      capabilities: ['段子小剧场', '角色主题曲', '短视频脚本'],
+      command: '准备今天的轻娱乐内容，优先给我一个最省心的图文音视频组合方案',
+      integrations: [
+        { id: 'baoyu-skills', label: 'baoyu-skills', enabled: true, note: '适合娱乐文、宣传文与社媒短内容' },
+        { id: 'suno', label: 'Suno API', enabled: !!(process.env.SUNO_API_URL && process.env.SUNO_KEY), note: process.env.SUNO_API_URL && process.env.SUNO_KEY ? '已可直接生歌' : '未配置，仅能先产歌词与 brief' },
+        { id: 'seeddance', label: 'SeedDance API', enabled: !!(process.env.SEEDDANCE_API_URL && process.env.SEEDDANCE_KEY), note: process.env.SEEDDANCE_API_URL && process.env.SEEDDANCE_KEY ? '已可直接生短视频' : '未配置，仅能先产脚本与分镜' }
+      ]
+    },
+    {
+      id: 'hanlinyuan',
+      name: '翰林院',
+      lineLabel: '连载创作产线',
+      type: 'novel',
+      capabilities: ['小说设定', '章节规划', '连载正文'],
+      command: '按结构化工作流推进一个新章节，先给我章节目标、爽点和结尾钩子',
+      integrations: [
+        { id: 'webnovel-writer', label: 'webnovel-writer', enabled: true, note: '适合卷纲、正文和审稿流程' }
+      ]
+    },
+    {
+      id: 'libu',
+      name: '礼部',
+      lineLabel: '宣发文案产线',
+      type: 'copywriting',
+      capabilities: ['X 文案', '娱乐化包装', '一稿多版传播文'],
+      command: '把今天最值得传播的一件事写成 3 个版本的短文案，分别偏热闹、偏戏谑、偏正式',
+      integrations: [
+        { id: 'baoyu-skills', label: 'baoyu-skills', enabled: true, note: '适合社媒文、包装文与娱乐稿' }
+      ]
+    }
+  ];
+
+  const lines = lineDefs.map(def => {
+    const sessData = getAgentSessionData(def.id);
+    const preview = getLatestAssistantPreview(def.id);
+    const idleMs = preview.updatedAt ? now - new Date(preview.updatedAt).getTime() : Infinity;
+    const hasExternalReady = def.integrations.some(item => item.id !== 'baoyu-skills' && item.enabled);
+    let status = 'draft_only';
+    let statusLabel = '待开工';
+
+    if (sessData.sessions > 0 && idleMs <= 24 * 60 * 60 * 1000) {
+      status = hasExternalReady || def.id !== 'jiaofangsi' ? 'ready' : 'warming';
+      statusLabel = status === 'ready' ? '可直接开工' : '可先产 brief';
+    } else if (sessData.sessions > 0) {
+      status = 'warming';
+      statusLabel = '需要热身';
+    }
+
+    return {
+      ...def,
+      status,
+      statusLabel,
+      sessions: sessData.sessions,
+      totalTokens: sessData.totalTokens,
+      updatedAt: preview.updatedAt ? new Date(preview.updatedAt).getTime() : 0,
+      summary: preview.text || (sessData.sessions > 0 ? '最近暂无可展示摘要' : '尚未形成稳定产出，可先下达第一条任务')
+    };
+  });
+
+  const externalIntegrations = [
+    {
+      id: 'suno',
+      label: 'Suno API',
+      enabled: !!(process.env.SUNO_API_URL && process.env.SUNO_KEY),
+      scope: '教坊司生歌',
+      note: process.env.SUNO_API_URL && process.env.SUNO_KEY ? '已配置，可直接进入歌曲任务流' : '未配置，当前只能整理歌曲 brief'
+    },
+    {
+      id: 'seeddance',
+      label: 'SeedDance API',
+      enabled: !!(process.env.SEEDDANCE_API_URL && process.env.SEEDDANCE_KEY),
+      scope: '教坊司生视频',
+      note: process.env.SEEDDANCE_API_URL && process.env.SEEDDANCE_KEY ? '已配置，可直接进入短视频任务流' : '未配置，当前只能整理脚本与分镜'
+    },
+    {
+      id: 'baoyu-skills',
+      label: 'baoyu-skills',
+      enabled: true,
+      scope: '画宫司 / 礼部 / 教坊司',
+      note: '作为软接入能力入口，用于图像、娱乐文案和社媒内容'
+    },
+    {
+      id: 'webnovel-writer',
+      label: 'webnovel-writer',
+      enabled: true,
+      scope: '翰林院',
+      note: '用于结构化长篇创作、章节规划和审稿流程'
+    }
+  ];
+
+  const templates = [
+    {
+      id: 'tpl-visual-1',
+      title: '来一组宫廷妃子图',
+      owner: '画宫司',
+      tags: ['视觉', '古风', '轻娱乐'],
+      description: '适合先产角色设定图、海报图或氛围图，再决定是否联动短视频。',
+      command: '给我一组宫廷妃子写真方案，先列 3 种风格，再按最稳的一种开始生成'
+    },
+    {
+      id: 'tpl-ent-1',
+      title: '来一套图文音视频娱乐包',
+      owner: '教坊司',
+      tags: ['娱乐', '歌曲', '视频'],
+      description: '先整理主题和氛围，再决定走图文、歌曲或短视频的组合产出。',
+      command: '围绕“昏君今天想放松”做一套轻娱乐内容，优先给我最省心的组合'
+    },
+    {
+      id: 'tpl-novel-1',
+      title: '推进连载章节',
+      owner: '翰林院',
+      tags: ['小说', '章节', '钩子'],
+      description: '适合让翰林院直接产章纲、爽点和结尾钩子，再决定是否写正文。',
+      command: '继续推进下一章，先给我章节目标、冲突、爽点和结尾钩子'
+    },
+    {
+      id: 'tpl-copy-1',
+      title: '做一波热闹宣发',
+      owner: '礼部',
+      tags: ['文案', 'X', '传播'],
+      description: '适合把已有成果包装成社媒传播内容，一次给多版。',
+      command: '把最近最好玩的成果包装成 3 条适合传播的短文案'
+    }
+  ];
+
+  const approvals = [];
+  if (!(process.env.SUNO_API_URL && process.env.SUNO_KEY)) {
+    approvals.push({
+      id: 'approval-suno',
+      type: 'integration',
+      title: '教坊司暂未接入 Suno',
+      description: '当前可先产歌词和歌曲 brief，但还不能直接提交生歌任务。',
+      priority: 'normal',
+      owner: '教坊司',
+      suggestedAction: '若近期要主打歌曲能力，可补齐 `SUNO_API_URL` 与 `SUNO_KEY`。'
+    });
+  }
+  if (!(process.env.SEEDDANCE_API_URL && process.env.SEEDDANCE_KEY)) {
+    approvals.push({
+      id: 'approval-seeddance',
+      type: 'integration',
+      title: '教坊司暂未接入 SeedDance',
+      description: '当前可先产脚本与分镜，但还不能直接提交短视频任务。',
+      priority: 'normal',
+      owner: '教坊司',
+      suggestedAction: '若近期要主打视频能力，可补齐 `SEEDDANCE_API_URL` 与 `SEEDDANCE_KEY`。'
+    });
+  }
+
+  for (const line of lines) {
+    if (line.status !== 'ready') {
+      approvals.push({
+        id: `approval-line-${line.id}`,
+        type: 'creative',
+        title: `${line.name} 需要主上拍板第一条任务`,
+        description: line.summary,
+        priority: line.sessions > 0 ? 'low' : 'normal',
+        owner: line.name,
+        suggestedAction: line.command
+      });
+    }
+  }
+
+  const readyLines = lines.filter(line => line.status === 'ready').length;
+  const summary = {
+    headline: readyLines >= 2 ? '享乐与内容产线已经能转起来了' : '产线骨架已在，仍需要你下几条示范任务',
+    subtitle: readyLines >= 2
+      ? '教坊司、画宫司、翰林院至少有两条线处于可直接调用状态。'
+      : '当前更适合先让几条产线各自做出首个样板，再进入稳定代劳模式。',
+    readyLines,
+    totalLines: lines.length,
+    enabledExternalIntegrations: externalIntegrations.filter(item => item.enabled && ['suno', 'seeddance'].includes(item.id)).length
+  };
+
+  const result = {
+    summary,
+    lines,
+    templates,
+    integrations: externalIntegrations,
+    approvals
+  };
+  setCache('creative_studio', result);
+  return result;
+}
+
 app.get('/api/sessions', authMiddleware, (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -448,134 +994,258 @@ app.get('/api/dashboard/summary', authMiddleware, (req, res) => {
     const cached = getCached('dashboard_summary');
     if (cached) return res.json(cached);
 
+    const config = getOpenClawConfig();
     const sessData = buildSessionsData();
     const sessions = sessData.sessions;
-    
-    // Total tokens
     let totalInput = 0, totalOutput = 0;
-    const deptActivity = {};
+    const agentStats = {};
+    const knownAgentIds = collectKnownAgentIds(config);
+
     for (const s of sessions) {
       totalInput += s.inputTokens || 0;
       totalOutput += s.outputTokens || 0;
-      if (!deptActivity[s.agentName] || s.updatedAt > deptActivity[s.agentName].updatedAt) {
-        deptActivity[s.agentName] = { name: s.agentName, updatedAt: s.updatedAt, messages: s.messageCount, tokens: s.totalTokens };
+
+      const meta = getAgentMeta(s.agentId);
+      const current = agentStats[s.agentId] || {
+        agentId: s.agentId,
+        name: meta.displayName,
+        category: meta.group,
+        categoryLabel: meta.groupLabel,
+        sortOrder: meta.order,
+        updatedAt: 0,
+        messages: 0,
+        tokens: 0,
+        sessions: 0
+      };
+
+      current.messages += s.messageCount || 0;
+      current.tokens += s.totalTokens || 0;
+      current.sessions += 1;
+      current.updatedAt = Math.max(current.updatedAt || 0, s.updatedAt || 0);
+      agentStats[s.agentId] = current;
+    }
+
+    for (const agentId of knownAgentIds) {
+      if (!agentStats[agentId]) {
+        const meta = getAgentMeta(agentId);
+        agentStats[agentId] = {
+          agentId,
+          name: meta.displayName,
+          category: meta.group,
+          categoryLabel: meta.groupLabel,
+          sortOrder: meta.order,
+          updatedAt: 0,
+          messages: 0,
+          tokens: 0,
+          sessions: 0
+        };
       }
     }
-    
-    // Department ranking by activity — with lastMessagePreview
-    const deptRanking = Object.values(deptActivity)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 10);
-    
-    // Add lastMessagePreview to each department
-    for (const dept of deptRanking) {
-      try {
-        const agentId = Object.entries(AGENT_DEPT_MAP).find(([, v]) => v === dept.name)?.[0];
-        if (agentId) {
-          const sessPath = join(AGENTS_DIR, agentId, 'sessions', 'sessions.json');
-          if (existsSync(sessPath)) {
-            const sd = JSON.parse(readFileSync(sessPath, 'utf-8'));
-            let bestFile = null, bestTime = 0;
-            for (const sess of Object.values(sd)) {
-              if ((sess.updatedAt || 0) > bestTime && sess.sessionFile && existsSync(sess.sessionFile)) {
-                bestTime = sess.updatedAt; bestFile = sess.sessionFile;
-              }
-            }
-            if (bestFile) {
-              const lines = readFileSync(bestFile, 'utf-8').split('\n').filter(l => l.trim());
-              for (let i = lines.length - 1; i >= Math.max(0, lines.length - 20); i--) {
-                try {
-                  const e = JSON.parse(lines[i]);
-                  if (e.type === 'message' && e.message?.role === 'assistant') {
-                    const c = e.message.content;
-                    const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => x.text || '').join('') : '';
-                    if (text.trim()) { dept.lastMessagePreview = text.substring(0, 100); break; }
-                  }
-                } catch { }
-              }
-            }
-          }
-        }
-      } catch { }
-    }
-    
-    // System stats
+
     const mem = process.memoryUsage();
     const cpuLoad = os.loadavg();
     const sysUptime = os.uptime();
     const freeMem = os.freemem();
     const totalMem = os.totalmem();
-    
-    // Per-day token stats (from JSONL file dates)
+    const cpuCount = Math.max(os.cpus()?.length || 1, 1);
+    const now = Date.now();
+    const activeThresholdMs = 6 * 60 * 60 * 1000;
+    const watchThresholdMs = 24 * 60 * 60 * 1000;
+    const previewCache = {};
+
+    const getPreview = (agentId) => {
+      if (!previewCache[agentId]) {
+        previewCache[agentId] = getLatestAssistantPreview(agentId);
+      }
+      return previewCache[agentId];
+    };
+
+    const allAgents = Object.values(agentStats)
+      .map(stat => {
+        const idleMs = stat.updatedAt ? now - stat.updatedAt : Infinity;
+        return {
+          ...stat,
+          idleHours: Number.isFinite(idleMs) ? Math.floor(idleMs / (60 * 60 * 1000)) : null,
+          staleLevel: idleMs <= activeThresholdMs ? 'active' : idleMs <= watchThresholdMs ? 'watch' : 'idle'
+        };
+      })
+      .sort((a, b) => {
+        if ((b.updatedAt || 0) !== (a.updatedAt || 0)) return (b.updatedAt || 0) - (a.updatedAt || 0);
+        if ((b.tokens || 0) !== (a.tokens || 0)) return (b.tokens || 0) - (a.tokens || 0);
+        return (a.sortOrder || 999) - (b.sortOrder || 999);
+      });
+
+    const activeAgents = allAgents.filter(agent => agent.staleLevel === 'active');
+    const spotlight = allAgents.slice(0, 6).map(agent => ({
+      ...agent,
+      lastMessagePreview: getPreview(agent.agentId).text
+    }));
+
+    const waitingQueue = allAgents
+      .filter(agent => agent.staleLevel !== 'active')
+      .sort((a, b) => (b.idleHours || 0) - (a.idleHours || 0))
+      .slice(0, 5)
+      .map(agent => ({
+        agentId: agent.agentId,
+        name: agent.name,
+        category: agent.category,
+        categoryLabel: agent.categoryLabel,
+        idleHours: agent.idleHours,
+        updatedAt: agent.updatedAt,
+        reason: agent.updatedAt ? `${agent.idleHours} 小时未汇报` : '尚无可用会话记录'
+      }));
+
+    const leisureBoard = ['jiaofangsi', 'huagong', 'hanlinyuan', 'yushanfang', 'neiwufu']
+      .filter(agentId => agentStats[agentId])
+      .map(agentId => {
+        const stat = agentStats[agentId];
+        const preview = getPreview(agentId);
+        const idleMs = stat.updatedAt ? now - stat.updatedAt : Infinity;
+        return {
+          agentId,
+          name: stat.name,
+          status: idleMs <= activeThresholdMs ? 'ready' : idleMs <= watchThresholdMs ? 'warming' : 'idle',
+          summary: preview.text || (stat.updatedAt ? '最近暂无可展示摘要' : '还没开始产出娱乐内容'),
+          updatedAt: stat.updatedAt
+        };
+      });
+
+    const groupBuckets = {};
+    for (const agent of allAgents) {
+      const key = agent.categoryLabel || '未分组';
+      if (!groupBuckets[key]) {
+        groupBuckets[key] = { key: agent.category || 'other', label: key, total: 0, active: 0, tokens: 0 };
+      }
+      groupBuckets[key].total += 1;
+      groupBuckets[key].tokens += agent.tokens || 0;
+      if (agent.staleLevel === 'active') groupBuckets[key].active += 1;
+    }
+
+    const groupOverview = Object.values(groupBuckets)
+      .sort((a, b) => {
+        const orderA = Math.min(...allAgents.filter(agent => agent.categoryLabel === a.label).map(agent => agent.sortOrder || 999), 999);
+        const orderB = Math.min(...allAgents.filter(agent => agent.categoryLabel === b.label).map(agent => agent.sortOrder || 999), 999);
+        return orderA - orderB;
+      });
+
     const dailyTokens = {};
-    const now = new Date();
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const key = d.toISOString().split('T')[0];
       dailyTokens[key] = 0;
     }
-    
-    // Try to estimate daily distribution from session file modification times
-    if (existsSync(AGENTS_DIR)) {
-      const agentDirs = readdirSync(AGENTS_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
-      for (const agentId of agentDirs) {
-        const sessDir = join(AGENTS_DIR, agentId, 'sessions');
-        if (!existsSync(sessDir)) continue;
-        try {
-          const files = readdirSync(sessDir).filter(f => f.endsWith('.jsonl'));
-          for (const f of files) {
-            try {
-              const stat = statSync(join(sessDir, f));
-              const dateKey = stat.mtime.toISOString().split('T')[0];
-              if (dailyTokens[dateKey] !== undefined) {
-                dailyTokens[dateKey] += Math.floor(stat.size / 100); // rough estimate
-              }
-            } catch { }
-          }
-        } catch { }
-      }
+
+    for (const session of sessions) {
+      if (!session.updatedAt) continue;
+      try {
+        const dateKey = new Date(session.updatedAt).toISOString().split('T')[0];
+        if (dailyTokens[dateKey] !== undefined) {
+          dailyTokens[dateKey] += session.totalTokens || 0;
+        }
+      } catch { }
     }
-    
+
     const dailyTrend = Object.entries(dailyTokens).map(([date, tokens]) => ({ date, tokens }));
-    
-    // Disk usage
+
     let diskUsage = 'N/A';
     try {
       const du = require('child_process').execSync("df -h / | tail -1 | awk '{print $5}'", { encoding: 'utf-8', timeout: 3000 }).trim();
       diskUsage = du;
     } catch { }
 
+    const totalTokens = totalInput + totalOutput;
+    const lazyScoreBase = allAgents.length ? Math.round((activeAgents.length / allAgents.length) * 100) : 0;
+    const lazyScore = Math.max(0, Math.min(100, Math.round(lazyScoreBase - waitingQueue.length * 5 + leisureBoard.filter(item => item.status === 'ready').length * 3)));
+
+    let title = '大局稳定，主上可以少操心';
+    let subtitle = '掌印总管正在分派事务，多数岗位保持运转。';
+    if (waitingQueue.length >= 3) {
+      title = '有几位臣子在摸鱼，建议点名催办';
+      subtitle = '先盯住最久未汇报的岗位，再让掌印总管补一份压缩简报。';
+    } else if (activeAgents.length <= Math.max(2, Math.floor(allAgents.length / 3))) {
+      title = '朝局偏安静，主上最好看一眼进度';
+      subtitle = '卷的人不算多，但还没到失控程度，适合发一句话推动。';
+    }
+
+    const topWorker = spotlight[0];
+    const quickWins = [
+      topWorker
+        ? `${topWorker.name} 当前最活跃，最近 ${topWorker.lastMessagePreview || '有新进展可看'}`
+        : '暂时还没有足够的活跃记录。',
+      waitingQueue.length > 0
+        ? `目前有 ${waitingQueue.length} 个岗位值得催办，最久未动的是 ${waitingQueue[0].name}。`
+        : '当前没有明显掉队岗位，整体节奏比较自觉。',
+      leisureBoard.some(item => item.status === 'ready')
+        ? `娱乐线可直接调用，${leisureBoard.find(item => item.status === 'ready')?.name} 已具备随叫随到状态。`
+        : '娱乐线今天不算活跃，若要放松可以先让教坊司热身。'
+    ];
+
+    const actionQueue = [
+      {
+        label: '看一句话总简报',
+        target: '掌印总管',
+        command: '把今天最值得我知道的三件事压缩成一句话简报'
+      },
+      {
+        label: waitingQueue[0] ? `催 ${waitingQueue[0].name}` : '催推进度',
+        target: waitingQueue[0]?.name || '廷议官',
+        command: waitingQueue[0]
+          ? `@${waitingQueue[0].name} 把卡住的事项继续推进，并向我汇报结果`
+          : '把当前未推进事项整理成待批清单'
+      },
+      {
+        label: '安排轻娱乐',
+        target: '教坊司',
+        command: '准备今天的轻娱乐内容，优先给我一个最省心的选项'
+      }
+    ];
+
+    const deptRanking = spotlight.map(item => ({
+      name: item.name,
+      updatedAt: item.updatedAt,
+      messages: item.messages,
+      tokens: item.tokens,
+      category: item.category,
+      categoryLabel: item.categoryLabel,
+      lastMessagePreview: item.lastMessagePreview
+    }));
+
     const summary = {
+      headline: {
+        title,
+        subtitle,
+        lazyScore,
+        activeAgents: activeAgents.length,
+        totalAgents: allAgents.length
+      },
+      quickWins,
+      actionQueue,
+      groupOverview,
+      spotlight,
+      waitingQueue,
+      leisureBoard,
       totalInput,
       totalOutput,
-      totalTokens: totalInput + totalOutput,
+      totalTokens,
       totalSessions: sessData.total,
       activeSessions: sessData.active,
       deptRanking,
       dailyTrend,
-      system: {
-        memUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-        memTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
-        sysMemUsedGB: ((totalMem - freeMem) / 1024 / 1024 / 1024).toFixed(1),
-        sysMemTotalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
-        cpuLoad: cpuLoad.map(l => l.toFixed(2)),
-        uptime: formatUptime(sysUptime),
-        uptimeSeconds: Math.floor(sysUptime),
-      },
       systemLoad: {
-        cpu1m: cpuLoad[0].toFixed(2),
-        cpu5m: cpuLoad[1].toFixed(2),
-        cpu15m: cpuLoad[2].toFixed(2),
-        memTotalGB: (totalMem / 1024 / 1024 / 1024).toFixed(1),
-        memFreeGB: (freeMem / 1024 / 1024 / 1024).toFixed(1),
-        memUsedPct: ((1 - freeMem / totalMem) * 100).toFixed(1),
+        cpu1m: Number(((cpuLoad[0] / cpuCount) * 100).toFixed(1)),
+        cpu5m: Number(((cpuLoad[1] / cpuCount) * 100).toFixed(1)),
+        cpu15m: Number(((cpuLoad[2] / cpuCount) * 100).toFixed(1)),
+        memTotalGB: Number((totalMem / 1024 / 1024 / 1024).toFixed(1)),
+        memFreeGB: Number((freeMem / 1024 / 1024 / 1024).toFixed(1)),
+        memUsedPct: Number(((1 - freeMem / totalMem) * 100).toFixed(1)),
         diskUsage,
+        uptime: formatUptime(sysUptime)
       },
-      lastUpdated: new Date().toISOString(),
+      lastUpdated: Date.now(),
       timestamp: new Date().toISOString(),
     };
-    
+
     setCache('dashboard_summary', summary);
     res.json(summary);
   } catch (err) {
@@ -762,8 +1432,8 @@ app.get('/api/departments/:name/recent', authMiddleware, (req, res) => {
     
     // Find agent ID from department name
     let agentId = null;
-    for (const [id, name] of Object.entries(AGENT_DEPT_MAP)) {
-      if (name === deptName || id === deptName) { agentId = id; break; }
+    for (const [id, meta] of Object.entries(AGENT_META)) {
+      if (meta.displayName === deptName || id === deptName) { agentId = id; break; }
     }
     if (!agentId) return res.json({ messages: [], error: 'Department not found' });
     
@@ -851,6 +1521,96 @@ app.post('/api/notion/sync', authMiddleware, (req, res) => {
   res.json({ success: true, message: '同步任务已触发' });
 });
 
+app.get('/api/content/studio', authMiddleware, (req, res) => {
+  try {
+    res.json(getCreativeStudioData());
+  } catch (err) {
+    res.status(500).json({ error: err.message, summary: null, lines: [], templates: [], integrations: [], approvals: [] });
+  }
+});
+
+app.get('/api/content/jiaofangsi/tasks', authMiddleware, async (req, res) => {
+  try {
+    const shouldRefresh = req.query.refresh === '1';
+    let tasks = Object.values(creativeTaskStore).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+
+    if (shouldRefresh) {
+      const refreshed = [];
+      for (const task of tasks.slice(0, 10)) {
+        if (['queued', 'running', 'submitted'].includes(task.status) && task.remoteTaskId) {
+          try {
+            refreshed.push(await refreshCreativeTask(task));
+          } catch {
+            refreshed.push(task);
+          }
+        } else {
+          refreshed.push(task);
+        }
+      }
+      const stable = tasks.slice(10);
+      tasks = [...refreshed, ...stable].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    }
+
+    res.json({ tasks });
+  } catch (err) {
+    res.status(500).json({ error: err.message, tasks: [] });
+  }
+});
+
+app.get('/api/content/jiaofangsi/tasks/:taskId', authMiddleware, async (req, res) => {
+  try {
+    const task = creativeTaskStore[req.params.taskId];
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    const result = req.query.refresh === '1' ? await refreshCreativeTask(task) : task;
+    res.json({ task: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/content/jiaofangsi/tasks', authMiddleware, async (req, res) => {
+  try {
+    const mode = String(req.body?.mode || '').trim();
+    const payload = req.body?.payload || {};
+    const task = await submitCreativeTask(mode, payload);
+    res.json({ success: true, task });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/approvals', authMiddleware, (req, res) => {
+  try {
+    const creative = getCreativeStudioData();
+    const pending = creative.approvals || [];
+    const processed = [
+      {
+        id: 'processed-creative-1',
+        type: 'creative',
+        title: '画宫司样板任务已确认',
+        description: '已采用“先给 3 套风格方案，再生成主视觉”的工作方式。',
+        priority: 'low',
+        owner: '画宫司',
+        action: 'approved',
+        processedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      },
+      {
+        id: 'processed-creative-2',
+        type: 'integration',
+        title: '翰林院走结构化创作流',
+        description: '长篇创作默认先出章纲与钩子，再决定是否写正文。',
+        priority: 'normal',
+        owner: '翰林院',
+        action: 'approved',
+        processedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
+      }
+    ];
+    res.json({ pending, processed, updatedAt: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message, pending: [], processed: [] });
+  }
+});
+
 app.get('/api/notion/data', authMiddleware, (req, res) => {
   const { type = 'daily' } = req.query;
   const config = getOpenClawConfig();
@@ -865,10 +1625,10 @@ app.get('/api/notion/data', authMiddleware, (req, res) => {
         const today = new Date().toISOString().split('T')[0];
         data.push({
           id: String(id++),
-          title: `${today} ${AGENT_DEPT_MAP[agentId] || agentId}日报`,
+          title: `${today} ${getAgentDisplayName(agentId)}简报`,
           date: today,
           summary: `今日会话${sessData.sessions}次，消耗Token ${sessData.totalTokens.toLocaleString()}`,
-          author: AGENT_DEPT_MAP[agentId] || agentId,
+          author: getAgentDisplayName(agentId),
           status: 'published'
         });
       }
@@ -886,10 +1646,10 @@ app.get('/api/notion/data', authMiddleware, (req, res) => {
     }));
     res.json({ type: 'finance', data, lastSync: new Date().toISOString() });
   } else if (type === 'personnel') {
-    const depts = ['工部', '户部', '吏部', '刑部', '兵部', '礼部'];
+    const depts = ['掌印总管', '兵部', '工部', '户部', '礼部', '教坊司'];
     const data = depts.map((name, i) => ({
       id: String(i + 1),
-      name: `${name}尚书`,
+      name: name === '掌印总管' ? name : `${name}主事`,
       title: name,
       department: name,
       status: 'active',
@@ -1330,7 +2090,7 @@ app.get('/api/channel-messages', authMiddleware, async (req, res) => {
       const accounts = config.channels?.discord?.accounts || {};
       const botIdToName = {};
       for (const [agentId, acc] of Object.entries(accounts)) {
-        if (acc.appId) botIdToName[acc.appId] = AGENT_DEPT_MAP[agentId] || acc.displayName || agentId;
+        if (acc.appId) botIdToName[acc.appId] = getAgentDisplayName(agentId) || acc.displayName || agentId;
       }
 
       const messages = data.reverse().map(msg => {
@@ -1411,13 +2171,19 @@ app.get('/api/bots', authMiddleware, (req, res) => {
   try {
     const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
     const accounts = config.channels?.discord?.accounts || {};
-    const bots = Object.entries(accounts).map(([id, acc]) => ({
-      id,
-      name: AGENT_DEPT_MAP[id] || id,
-      displayName: acc.displayName || AGENT_DEPT_MAP[id] || id,
-      model: acc.model || config.defaultModel || 'default',
-      hasToken: !!acc.token,
-    }));
+    const bots = Object.entries(accounts).map(([id, acc]) => {
+      const meta = getAgentMeta(id);
+      return {
+        id,
+        name: meta.displayName,
+        displayName: acc.displayName || meta.displayName,
+        category: meta.group,
+        categoryLabel: meta.groupLabel,
+        sortOrder: meta.order,
+        model: acc.model || config.defaultModel || 'default',
+        hasToken: !!acc.token,
+      };
+    }).sort((a, b) => a.sortOrder - b.sortOrder);
     res.json({ bots });
   } catch (err) {
     res.status(500).json({ error: err.message });

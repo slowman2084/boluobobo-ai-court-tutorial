@@ -5,11 +5,19 @@ const AUTH_TOKEN = localStorage.getItem('boluo_auth_token') || ''
 const COURT_CHANNEL = '1474091579630293164'
 
 interface Bot {
-  id: string; name: string; displayName: string; model: string; hasToken: boolean
+  id: string
+  name: string
+  displayName: string
+  model: string
+  hasToken: boolean
+  category?: string
+  categoryLabel?: string
 }
 
 const COLORS: Record<string, { bg: string; hat: string }> = {
   main:       { bg: '#d4a574', hat: '#b8894d' },
+  qijuzhu:    { bg: '#60a5fa', hat: '#2563eb' },
+  tingyi:     { bg: '#34d399', hat: '#059669' },
   neige:      { bg: '#ef4444', hat: '#b91c1c' },
   duchayuan:  { bg: '#22c55e', hat: '#15803d' },
   gongbu:     { bg: '#3b82f6', hat: '#1d4ed8' },
@@ -19,6 +27,8 @@ const COLORS: Record<string, { bg: string; hat: string }> = {
   xingbu:     { bg: '#8b5cf6', hat: '#6d28d9' },
   libu:       { bg: '#06b6d4', hat: '#0e7490' },
   neiwufu:    { bg: '#f97316', hat: '#c2410c' },
+  huagong:    { bg: '#fb7185', hat: '#e11d48' },
+  jiaofangsi: { bg: '#f472b6', hat: '#db2777' },
   hanlinyuan: { bg: '#14b8a6', hat: '#0f766e' },
   taiyiyuan:  { bg: '#f472b6', hat: '#db2777' },
   guozijian:  { bg: '#a78bfa', hat: '#7c3aed' },
@@ -158,9 +168,11 @@ export default function Court() {
     setTimeout(() => logRef.current?.scrollTo(0, logRef.current.scrollHeight), 100)
   }
 
-  const core = bots.filter(b => ['main', 'neige', 'duchayuan'].includes(b.id))
-  const liubu = bots.filter(b => ['gongbu', 'hubu', 'bingbu', 'libu2', 'xingbu', 'libu'].includes(b.id))
-  const others = bots.filter(b => !['main', 'neige', 'duchayuan', 'gongbu', 'hubu', 'bingbu', 'libu2', 'xingbu', 'libu'].includes(b.id))
+  const emperor = bots.find(b => b.id === 'main') || null
+  const innerCourt = bots.filter(b => b.category === 'inner_court' && b.id !== 'main')
+  const liubu = bots.filter(b => b.category === 'ministry')
+  const lifestyle = bots.filter(b => b.category === 'leisure')
+  const legacy = bots.filter(b => !b.category || b.category === 'legacy' || b.category === 'other')
 
   return (
     <div className="space-y-4">
@@ -175,9 +187,9 @@ export default function Court() {
             
             <div className="text-[#ffd700] text-xl sm:text-2xl font-bold tracking-[0.5em]"
                  style={{ textShadow: '0 0 20px rgba(255,215,0,0.3), 2px 2px 4px rgba(0,0,0,0.5)', fontFamily: 'serif' }}>
-              菠萝朝堂
+              昏君朝会
             </div>
-            <div className="text-[#ffd700]/40 text-xs mt-1 tracking-[0.3em]">PINEAPPLE IMPERIAL COURT</div>
+            <div className="text-[#ffd700]/40 text-xs mt-1 tracking-[0.3em]">HANDS-OFF IMPERIAL COURT</div>
           </div>
         </div>
 
@@ -198,11 +210,27 @@ export default function Court() {
             {/* 御座区 */}
             <div className="text-center mb-4">
               <div className="inline-block px-4 py-0.5 rounded-full bg-[#ffd700]/10 border border-[#ffd700]/20 mb-3">
-                <span className="text-[10px] sm:text-xs text-[#ffd700]/70 tracking-wider">👑 御 座</span>
+                <span className="text-[10px] sm:text-xs text-[#ffd700]/70 tracking-wider">👑 主 位</span>
               </div>
               <div className="flex justify-center gap-2 sm:gap-4">
-                {core.map(bot => (
-                  <PixelPerson key={bot.id} bot={bot} rank="emperor"
+                {emperor ? (
+                  <PixelPerson key={emperor.id} bot={emperor} rank="emperor"
+                    selected={selectedBot === emperor.id} online={emperor.hasToken}
+                    onClick={() => setSelectedBot(selectedBot === emperor.id ? null : emperor.id)} />
+                ) : (
+                  <div className={`text-xs ${sub}`}>未发现掌印总管</div>
+                )}
+              </div>
+            </div>
+
+            {/* 内廷 */}
+            <div className="text-center mb-4">
+              <div className="inline-block px-4 py-0.5 rounded-full bg-[#d4a574]/5 border border-[#d4a574]/10 mb-3">
+                <span className="text-[10px] sm:text-xs text-[#d4a574]/50 tracking-wider">🪶 内 廷</span>
+              </div>
+              <div className="flex justify-center flex-wrap gap-1.5 sm:gap-3">
+                {innerCourt.map(bot => (
+                  <PixelPerson key={bot.id} bot={bot} rank="minister"
                     selected={selectedBot === bot.id} online={bot.hasToken}
                     onClick={() => setSelectedBot(selectedBot === bot.id ? null : bot.id)} />
                 ))}
@@ -237,19 +265,41 @@ export default function Court() {
               <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#d4a574]/20 to-transparent" />
             </div>
 
-            {/* 诸院 */}
+            {/* 后宫 / 生活机构 */}
             <div className="text-center">
               <div className="inline-block px-4 py-0.5 rounded-full bg-[#d4a574]/5 border border-[#d4a574]/10 mb-3">
-                <span className="text-[10px] sm:text-xs text-[#d4a574]/40 tracking-wider">📚 诸 院</span>
+                <span className="text-[10px] sm:text-xs text-[#d4a574]/40 tracking-wider">🎐 后宫 / 生 活 机 构</span>
               </div>
               <div className="flex justify-center flex-wrap gap-1.5 sm:gap-3">
-                {others.map(bot => (
+                {lifestyle.map(bot => (
                   <PixelPerson key={bot.id} bot={bot} rank="official"
                     selected={selectedBot === bot.id} online={bot.hasToken}
                     onClick={() => setSelectedBot(selectedBot === bot.id ? null : bot.id)} />
                 ))}
               </div>
             </div>
+
+            {legacy.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 my-3">
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#d4a574]/20 to-transparent" />
+                  <span className="text-[#d4a574]/20 text-xs">◇</span>
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#d4a574]/20 to-transparent" />
+                </div>
+                <div className="text-center">
+                  <div className="inline-block px-4 py-0.5 rounded-full bg-[#d4a574]/5 border border-[#d4a574]/10 mb-3">
+                    <span className="text-[10px] sm:text-xs text-[#d4a574]/40 tracking-wider">🗂️ 旧 架 构</span>
+                  </div>
+                  <div className="flex justify-center flex-wrap gap-1.5 sm:gap-3">
+                    {legacy.map(bot => (
+                      <PixelPerson key={bot.id} bot={bot} rank="official"
+                        selected={selectedBot === bot.id} online={bot.hasToken}
+                        onClick={() => setSelectedBot(selectedBot === bot.id ? null : bot.id)} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -268,10 +318,10 @@ export default function Court() {
 
         <div className="flex flex-wrap gap-1.5 mb-3">
           {[
-            { label: '📊 状态', cmd: '报告当前状态' },
-            { label: '📋 摘要', cmd: '汇报今日工作摘要' },
-            { label: '🔥 Token', cmd: '报告今日Token消耗' },
-            { label: '🔄 刷新', cmd: '刷新所有数据' },
+            { label: '📊 总览', cmd: '把当前全局状态整理成一份最短简报给我' },
+            { label: '📋 催办', cmd: '把今天还没推进的事情主动拆解并安排下去' },
+            { label: '🎭 娱乐', cmd: '给我准备今天的轻娱乐内容和放松安排' },
+            { label: '🔄 刷新', cmd: '刷新所有数据并给我一句话结论' },
           ].map(q => (
             <button key={q.label} onClick={() => setCommand(q.cmd)}
               className={`text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 rounded border border-[#d4a574]/20 ${sub} hover:text-[#d4a574] hover:border-[#d4a574]/40 cursor-pointer transition-all`}>
@@ -283,7 +333,7 @@ export default function Court() {
         <div className="flex gap-2">
           <input type="text" value={command} onChange={e => setCommand(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !sending && sendCommand()}
-            placeholder="输入圣旨..."
+            placeholder="输入一句话，让群臣自己拆解执行..."
             className={`flex-1 px-3 py-2.5 text-sm rounded border ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-[#0d0d1a] border-[#d4a574]/20'} focus:outline-none focus:border-[#d4a574]`} />
           <button onClick={sendCommand} disabled={sending || !command.trim()}
             className="px-4 sm:px-6 py-2.5 bg-gradient-to-r from-[#d4a574] to-[#c49464] text-[#0d0d1a] text-sm font-bold rounded hover:brightness-110 disabled:opacity-40 cursor-pointer transition-all shadow-lg shadow-[#d4a574]/20">

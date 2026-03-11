@@ -1,17 +1,24 @@
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useTheme } from "../theme"
 
 interface PendingItem {
   id: string
-  type: 'cron' | 'session' | 'node' | 'system'
+  type: "integration" | "creative"
   title: string
   description: string
-  timestamp: string
-  priority: 'high' | 'normal' | 'low'
+  priority: "high" | "normal" | "low"
+  owner: string
+  suggestedAction: string
 }
 
-interface ProcessedItem extends PendingItem {
-  action: 'approved' | 'rejected' | 'ignored'
+interface ProcessedItem {
+  id: string
+  type: "integration" | "creative"
+  title: string
+  description: string
+  priority: "high" | "normal" | "low"
+  owner: string
+  action: "approved" | "rejected" | "ignored"
   processedAt: string
 }
 
@@ -27,122 +34,12 @@ export default function MemorialHall() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      // 获取 Cron 任务状态
-      const cronRes = await fetch('/api/cron', {
-        headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
-      })
-      
-      const pendingItems: PendingItem[] = []
-      
-      if (cronRes.ok) {
-        const cronData = await cronRes.json()
-        const jobs = cronData.jobs || []
-        
-        // 检查失败的 Cron 任务
-        for (const job of jobs) {
-          if (job.status === 'error') {
-            pendingItems.push({
-              id: `cron-${job.id}`,
-              type: 'cron',
-              title: `Cron 任务失败: ${job.name}`,
-              description: `任务调度出错，需要检查配置。上次错误: ${job.status}`,
-              timestamp: job.lastRun || new Date().toISOString(),
-              priority: 'high'
-            })
-          }
-        }
-      }
-
-      // 获取会话状态
-      const sessionsRes = await fetch('/api/sessions?limit=20', {
-        headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
-      })
-      
-      if (sessionsRes.ok) {
-        const sessionsData = await sessionsRes.json()
-        const sessions = sessionsData.sessions || []
-        
-        // 检查长时间未活跃的会话
-        const now = Date.now()
-        for (const session of sessions) {
-          const inactiveMs = now - session.updatedAt
-          if (inactiveMs > 24 * 60 * 60 * 1000) { // 超过24小时
-            pendingItems.push({
-              id: `session-${session.id}`,
-              type: 'session',
-              title: `会话待清理: ${session.agentName}`,
-              description: `会话已 ${Math.round(inactiveMs / (1000 * 60 * 60))} 小时未活跃`,
-              timestamp: new Date(session.updatedAt).toISOString(),
-              priority: 'low'
-            })
-          }
-        }
-      }
-
-      // 获取节点状态
-      const nodesRes = await fetch('/api/nodes', {
-        headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
-      })
-      
-      if (nodesRes.ok) {
-        const nodesData = await nodesRes.json()
-        const nodes = nodesData.nodes || []
-        
-        // 检查离线节点
-        for (const node of nodes) {
-          if (node.status === 'offline') {
-            pendingItems.push({
-              id: `node-${node.id}`,
-              type: 'node',
-              title: `节点离线: ${node.name}`,
-              description: `节点已离线超过1小时，需要检查网络连接`,
-              timestamp: new Date(node.lastHeartbeat).toISOString(),
-              priority: 'high'
-            })
-          }
-        }
-      }
-
-      // 添加一些系统级待办
-      if (pendingItems.length === 0) {
-        pendingItems.push({
-          id: 'system-1',
-          type: 'system',
-          title: '系统运行正常',
-          description: '所有监控项均正常，无需处理',
-          timestamp: new Date().toISOString(),
-          priority: 'low'
-        })
-      }
-
-      setPending(pendingItems)
-      
-      // 模拟已处理记录
-      setProcessed([
-        {
-          id: 'proc-1',
-          type: 'cron',
-          title: 'Cron 任务恢复: gui-iter',
-          description: '任务已自动恢复',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          priority: 'normal',
-          action: 'approved',
-          processedAt: new Date(Date.now() - 3500000).toISOString()
-        },
-        {
-          id: 'proc-2',
-          type: 'node',
-          title: '节点重启: test-node',
-          description: '已重启节点服务',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          priority: 'high',
-          action: 'approved',
-          processedAt: new Date(Date.now() - 7100000).toISOString()
-        }
-      ])
-      
+      const res = await fetch('/api/approvals', { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } })
+      const data = await res.json()
+      setPending(data.pending || [])
+      setProcessed(data.processed || [])
     } catch (e) {
-      console.error('Failed to fetch memorial data:', e)
+      console.error('Failed to fetch approval data:', e)
     }
     setLoading(false)
   }
@@ -152,26 +49,22 @@ export default function MemorialHall() {
   }, [])
 
   const handleAction = (item: PendingItem, action: 'approved' | 'rejected' | 'ignored') => {
-    // 移出待处理列表
     setPending(prev => prev.filter(p => p.id !== item.id))
-    
-    // 添加到已处理列表
-    const processedItem: ProcessedItem = {
-      ...item,
+    setProcessed(prev => [{
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      description: item.description,
+      priority: item.priority,
+      owner: item.owner,
       action,
       processedAt: new Date().toISOString()
-    }
-    setProcessed(prev => [processedItem, ...prev])
+    }, ...prev])
   }
 
   const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'cron': return '⏰'
-      case 'session': return '💬'
-      case 'node': return '🖥️'
-      case 'system': return '⚙️'
-      default: return '📋'
-    }
+    if (type === 'integration') return '🔌'
+    return '🎭'
   }
 
   const getPriorityColor = (priority: string) => {
@@ -184,12 +77,9 @@ export default function MemorialHall() {
   }
 
   const getActionColor = (action: string) => {
-    switch (action) {
-      case 'approved': return 'text-green-500'
-      case 'rejected': return 'text-red-500'
-      case 'ignored': return 'text-gray-500'
-      default: return 'text-gray-500'
-    }
+    if (action === 'approved') return 'text-green-500'
+    if (action === 'rejected') return 'text-red-500'
+    return 'text-gray-500'
   }
 
   const formatTime = (ts: string) => {
@@ -201,25 +91,41 @@ export default function MemorialHall() {
     return '刚刚'
   }
 
-  if (loading) {
-    return <div className="text-[#a3a3a3]">加载中...</div>
-  }
+  if (loading) return <div className="text-[#a3a3a3]">加载中...</div>
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className={`text-lg font-medium ${theme === 'light' ? 'text-gray-800' : 'text-[#d4a574]'}`}>
-          📜 奏报厅
-        </h2>
-        <button
-          onClick={fetchData}
-          className="px-3 py-1 text-xs border border-[#d4a574] text-[#d4a574] hover:bg-[#d4a574]/10"
-        >
+        <div>
+          <h2 className={`text-lg font-medium ${theme === 'light' ? 'text-gray-800' : 'text-[#d4a574]'}`}>
+            🏮 待批事项
+          </h2>
+          <div className={`text-sm mt-1 ${theme === 'light' ? 'text-gray-500' : 'text-[#a3a3a3]'}`}>
+            这里集中展示娱乐与内容产线里真正需要主上拍板的事。
+          </div>
+        </div>
+        <button onClick={fetchData} className="px-3 py-1 text-xs border border-[#d4a574] text-[#d4a574] hover:bg-[#d4a574]/10">
           刷新
         </button>
       </div>
 
-      {/* Tab 切换 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: '待你拍板', value: pending.length, icon: '🪪' },
+          { label: '已处理', value: processed.length, icon: '✅' },
+          { label: '接口接入项', value: pending.filter(item => item.type === 'integration').length, icon: '🔌' },
+          { label: '创作拍板项', value: pending.filter(item => item.type === 'creative').length, icon: '🎭' },
+        ].map(item => (
+          <div
+            key={item.label}
+            className={`rounded-lg p-3 ${theme === 'light' ? 'bg-white border border-gray-200' : 'bg-[#1a1a2e] border border-[#d4a574]/20'}`}
+          >
+            <div className={`text-[10px] uppercase ${theme === 'light' ? 'text-gray-500' : 'text-[#a3a3a3]'}`}>{item.icon} {item.label}</div>
+            <div className="mt-1 text-xl font-mono text-[#d4a574]">{item.value}</div>
+          </div>
+        ))}
+      </div>
+
       <div className="flex gap-2 border-b border-[#d4a574]/30 pb-2">
         <button
           onClick={() => setActiveTab('pending')}
@@ -229,7 +135,7 @@ export default function MemorialHall() {
               : 'text-[#a3a3a3] hover:text-[#e5e5e5]'
           }`}
         >
-          ⏳ 待处理 ({pending.length})
+          ⏳ 待拍板 ({pending.length})
         </button>
         <button
           onClick={() => setActiveTab('processed')}
@@ -243,63 +149,52 @@ export default function MemorialHall() {
         </button>
       </div>
 
-      {/* 待处理事项 */}
       {activeTab === 'pending' && (
         <div className="space-y-4">
           {pending.length === 0 ? (
             <div className={`text-center py-12 ${theme === 'light' ? 'text-gray-500' : 'text-[#a3a3a3]'}`}>
-              <div className="text-4xl mb-4">🎉</div>
-              <div className="text-lg">暂无待处理事项</div>
-              <div className="text-sm mt-2">系统运行正常</div>
+              <div className="text-4xl mb-4">😌</div>
+              <div className="text-lg">当前没有必须你出面的事项</div>
+              <div className="text-sm mt-2">群臣自己还能继续转一会儿</div>
             </div>
           ) : (
             pending.map(item => (
               <div
                 key={item.id}
-                className={`p-4 rounded-lg border ${
-                  theme === 'light' 
-                    ? 'bg-white border-gray-200' 
-                    : 'bg-[#1a1a2e] border-[#d4a574]/20'
-                }`}
+                className={`p-4 rounded-lg border ${theme === 'light' ? 'bg-white border-gray-200' : 'bg-[#1a1a2e] border-[#d4a574]/20'}`}
               >
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex items-start justify-between mb-3 gap-3">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{getTypeIcon(item.type)}</span>
                     <div>
                       <div className="font-medium">{item.title}</div>
-                      <div className={`text-xs px-2 py-0.5 rounded inline-block mt-1 ${getPriorityColor(item.priority)}`}>
-                        {item.priority === 'high' ? '紧急' : item.priority === 'normal' ? '普通' : '低优先级'}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-xs px-2 py-0.5 rounded ${getPriorityColor(item.priority)}`}>
+                          {item.priority === 'high' ? '紧急' : item.priority === 'normal' ? '普通' : '低优先级'}
+                        </span>
+                        <span className={`text-xs ${theme === 'light' ? 'text-gray-500' : 'text-[#a3a3a3]'}`}>承接：{item.owner}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="text-xs text-[#a3a3a3]">
-                    {formatTime(item.timestamp)}
-                  </div>
                 </div>
-                
-                <div className={`text-sm mb-4 ${theme === 'light' ? 'text-gray-600' : 'text-[#a3a3a3]'}`}>
+
+                <div className={`text-sm mb-3 ${theme === 'light' ? 'text-gray-600' : 'text-[#a3a3a3]'}`}>
                   {item.description}
                 </div>
 
-                {/* 操作按钮 */}
+                <div className={`rounded-lg p-3 text-xs leading-relaxed font-mono mb-4 ${theme === 'light' ? 'bg-gray-50 text-gray-700' : 'bg-[#0d0d1a] text-[#d1d5db]'}`}>
+                  {item.suggestedAction}
+                </div>
+
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAction(item, 'approved')}
-                    className="px-4 py-1.5 text-sm bg-green-500/20 text-green-500 rounded hover:bg-green-500/30"
-                  >
+                  <button onClick={() => handleAction(item, 'approved')} className="px-4 py-1.5 text-sm bg-green-500/20 text-green-500 rounded hover:bg-green-500/30">
                     ✅ 批准
                   </button>
-                  <button
-                    onClick={() => handleAction(item, 'rejected')}
-                    className="px-4 py-1.5 text-sm bg-red-500/20 text-red-500 rounded hover:bg-red-500/30"
-                  >
+                  <button onClick={() => handleAction(item, 'rejected')} className="px-4 py-1.5 text-sm bg-red-500/20 text-red-500 rounded hover:bg-red-500/30">
                     ❌ 拒绝
                   </button>
-                  <button
-                    onClick={() => handleAction(item, 'ignored')}
-                    className="px-4 py-1.5 text-sm bg-gray-500/20 text-gray-500 rounded hover:bg-gray-500/30"
-                  >
-                    👄 忽略
+                  <button onClick={() => handleAction(item, 'ignored')} className="px-4 py-1.5 text-sm bg-gray-500/20 text-gray-500 rounded hover:bg-gray-500/30">
+                    👄 先搁着
                   </button>
                 </div>
               </div>
@@ -308,7 +203,6 @@ export default function MemorialHall() {
         </div>
       )}
 
-      {/* 已处理记录 */}
       {activeTab === 'processed' && (
         <div className="space-y-3">
           {processed.length === 0 ? (
@@ -319,24 +213,21 @@ export default function MemorialHall() {
             processed.map(item => (
               <div
                 key={item.id}
-                className={`p-3 rounded-lg border opacity-60 ${
-                  theme === 'light' 
-                    ? 'bg-gray-50 border-gray-200' 
-                    : 'bg-[#0d0d1a] border-[#d4a574]/10'
-                }`}
+                className={`p-3 rounded-lg border opacity-70 ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-[#0d0d1a] border-[#d4a574]/10'}`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span>{getTypeIcon(item.type)}</span>
-                    <span className="text-sm">{item.title}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm truncate">{item.title}</div>
+                      <div className={`text-[10px] ${theme === 'light' ? 'text-gray-500' : 'text-[#a3a3a3]'}`}>{item.owner}</div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className={`text-sm ${getActionColor(item.action)}`}>
-                      {item.action === 'approved' ? '✅ 已批准' : item.action === 'rejected' ? '❌ 已拒绝' : '👄 已忽略'}
+                      {item.action === 'approved' ? '✅ 已批准' : item.action === 'rejected' ? '❌ 已拒绝' : '👄 已搁置'}
                     </span>
-                    <span className="text-xs text-[#a3a3a3]">
-                      {formatTime(item.processedAt)}
-                    </span>
+                    <span className="text-xs text-[#a3a3a3]">{formatTime(item.processedAt)}</span>
                   </div>
                 </div>
               </div>

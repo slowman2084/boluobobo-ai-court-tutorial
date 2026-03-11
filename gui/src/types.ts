@@ -1,13 +1,16 @@
 export interface BotAccount {
   name: string
   displayName: string
+  category?: string
+  categoryLabel?: string
+  sortOrder?: number
   status: "online" | "offline"
   model: string
   sessions: number
   inputTokens: number
   outputTokens: number
   totalTokens: number
-  groupPolicy: string
+  groupPolicy?: string
   uptime?: string
 }
 

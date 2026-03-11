@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import type { TabName } from "./types"
 import { useStatus } from "./hooks/useStatus"
 import { useTheme } from "./theme"
@@ -19,21 +19,36 @@ import NotionBoard from "./pages/NotionBoard"
 import Search from "./pages/Search"
 import CronJobs from "./pages/CronJobs"
 
-const tabs: { key: TabName; label: string; icon: string }[] = [
-  { key: "dashboard", label: "总览", icon: "📊" },
-  { key: "court", label: "朝堂", icon: "🏯" },
-  { key: "departments", label: "部门", icon: "🏛️" },
-  { key: "tokens", label: "Token统计", icon: "🔥" },
-  { key: "sessions", label: "会话", icon: "💬" },
-  { key: "channels", label: "频道", icon: "📡" },
-  { key: "nodes", label: "节点", icon: "🖥️" },
-  { key: "notion", label: "奏章板", icon: "📜" },
-  { key: "memorial", label: "奏报厅", icon: "🏮" },
-  { key: "logs", label: "日志", icon: "📋" },
-  { key: "search", label: "搜索", icon: "🔍" },
-  { key: "cron", label: "定时", icon: "⏰" },
-  { key: "system", label: "系统", icon: "⚙️" },
-  { key: "settings", label: "设置", icon: "🔧" },
+const navSections: { title: string; items: { key: TabName; label: string; icon: string }[] }[] = [
+  {
+    title: "昏君中枢",
+    items: [
+      { key: "dashboard", label: "总览", icon: "📊" },
+      { key: "court", label: "昏君朝会", icon: "🏯" },
+      { key: "departments", label: "宫务名册", icon: "🏛️" },
+    ],
+  },
+  {
+    title: "簿册与传旨",
+    items: [
+      { key: "tokens", label: "卷王消耗", icon: "🔥" },
+      { key: "sessions", label: "话事记录", icon: "💬" },
+      { key: "channels", label: "传旨通道", icon: "📡" },
+      { key: "notion", label: "享乐产线", icon: "📜" },
+      { key: "memorial", label: "待批事项", icon: "🏮" },
+      { key: "search", label: "内库检索", icon: "🔍" },
+      { key: "cron", label: "自动催办", icon: "⏰" },
+    ],
+  },
+  {
+    title: "系统支撑",
+    items: [
+      { key: "nodes", label: "节点", icon: "🖥️" },
+      { key: "logs", label: "起居注", icon: "📋" },
+      { key: "system", label: "系统", icon: "⚙️" },
+      { key: "settings", label: "偏好", icon: "🔧" },
+    ],
+  },
 ]
 
 function App() {
@@ -105,9 +120,9 @@ function App() {
           <div className="flex items-center gap-2.5">
             <PineappleLogo size={32} />
             <div>
-              <div className="text-base font-bold text-accent-gradient tracking-wide">菠萝王朝</div>
+              <div className="text-base font-bold text-accent-gradient tracking-wide">AI 昏君</div>
               <div className="text-[9px] tracking-widest uppercase" style={{ color: 'var(--text-tertiary)' }}>
-                {data?.uptime ? `运行 ${data.uptime}` : 'Pineapple Dynasty'}
+                {data?.uptime ? `群臣代劳 ${data.uptime}` : 'Hands-off Imperial Workflow'}
               </div>
             </div>
           </div>
@@ -115,36 +130,43 @@ function App() {
 
         {/* Nav Items */}
         <nav className="flex-1 py-3 overflow-y-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setSidebarOpen(false) }}
-              className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm transition-all cursor-pointer ${
-                activeTab === tab.key
-                  ? 'nav-active'
-                  : ''
-              }`}
-              style={{
-                borderLeft: activeTab === tab.key ? '3px solid var(--accent)' : '3px solid transparent',
-                backgroundColor: activeTab === tab.key ? 'var(--accent-glow)' : undefined,
-                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
-              }}
-              onMouseEnter={e => {
-                if (activeTab !== tab.key) {
-                  e.currentTarget.style.backgroundColor = 'var(--accent-glow)'
-                  e.currentTarget.style.color = 'var(--text-primary)'
-                }
-              }}
-              onMouseLeave={e => {
-                if (activeTab !== tab.key) {
-                  e.currentTarget.style.backgroundColor = ''
-                  e.currentTarget.style.color = 'var(--text-secondary)'
-                }
-              }}
-            >
-              <span className="text-base">{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
+          {navSections.map((section) => (
+            <Fragment key={section.title}>
+              <div className="px-5 pt-3 pb-1 text-[10px] tracking-[0.2em] uppercase" style={{ color: 'var(--text-tertiary)' }}>
+                {section.title}
+              </div>
+              {section.items.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => { setActiveTab(tab.key); setSidebarOpen(false) }}
+                  className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm transition-all cursor-pointer ${
+                    activeTab === tab.key
+                      ? 'nav-active'
+                      : ''
+                  }`}
+                  style={{
+                    borderLeft: activeTab === tab.key ? '3px solid var(--accent)' : '3px solid transparent',
+                    backgroundColor: activeTab === tab.key ? 'var(--accent-glow)' : undefined,
+                    color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                  onMouseEnter={e => {
+                    if (activeTab !== tab.key) {
+                      e.currentTarget.style.backgroundColor = 'var(--accent-glow)'
+                      e.currentTarget.style.color = 'var(--text-primary)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (activeTab !== tab.key) {
+                      e.currentTarget.style.backgroundColor = ''
+                      e.currentTarget.style.color = 'var(--text-secondary)'
+                    }
+                  }}
+                >
+                  <span className="text-base">{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </Fragment>
           ))}
         </nav>
 
@@ -181,7 +203,7 @@ function App() {
           <button onClick={() => setSidebarOpen(true)} className="text-xl cursor-pointer" style={{ color: 'var(--accent)' }}>☰</button>
           <div className="flex items-center gap-2">
             <PineappleLogo size={22} />
-            <span className="font-bold text-accent-gradient">菠萝王朝</span>
+            <span className="font-bold text-accent-gradient">AI 昏君</span>
           </div>
           <button onClick={refresh} className="cursor-pointer" style={{ color: 'var(--text-secondary)' }}>↻</button>
         </header>

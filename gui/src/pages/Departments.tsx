@@ -109,13 +109,13 @@ export default function Departments({ data }: Props) {
   return (
     <div className="space-y-4 sm:space-y-6">
       <h2 className={`text-lg font-medium ${theme === 'light' ? 'text-gray-800' : 'text-[#d4a574]'}`}>
-        🏛️ 部门管理
+        🏛️ 宫务名册
       </h2>
 
       {/* 统计 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { l: '总部门', v: data.botAccounts.length, icon: '🏛️' },
+          { l: '总席位', v: data.botAccounts.length, icon: '🏛️' },
           { l: '在线', v: onlineCount, icon: '🟢' },
           { l: '总会话', v: totalSessions, icon: '💬' },
           { l: '总Token', v: fmt(totalTokens), icon: '🔥' },
@@ -147,6 +147,11 @@ export default function Departments({ data }: Props) {
                       bot.status === 'online' ? 'bg-green-500' : 'bg-red-500'
                     }`} />
                     <span className="text-sm sm:text-base font-medium">{bot.displayName || bot.name}</span>
+                    {bot.categoryLabel && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${theme === 'light' ? 'bg-amber-50 text-amber-700' : 'bg-[#d4a574]/10 text-[#d4a574]'}`}>
+                        {bot.categoryLabel}
+                      </span>
+                    )}
                     <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusStyle(bot.status)}`}>
                       {statusText(bot.status)}
                     </span>
@@ -171,6 +176,7 @@ export default function Departments({ data }: Props) {
                   {/* 详细信息 */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4 text-xs">
                     <div><span className={sub}>内部名称: </span><span className="font-mono">{bot.name}</span></div>
+                    <div><span className={sub}>所属分组: </span><span>{bot.categoryLabel || '未分组'}</span></div>
                     <div><span className={sub}>模型: </span><span className="font-mono">{bot.model?.replace(/^[^/]+\//, '')}</span></div>
                     <div><span className={sub}>输入Token: </span><span className="font-mono text-[#d4a574]">{bot.inputTokens.toLocaleString()}</span></div>
                     <div><span className={sub}>输出Token: </span><span className="font-mono text-[#d4a574]">{bot.outputTokens.toLocaleString()}</span></div>

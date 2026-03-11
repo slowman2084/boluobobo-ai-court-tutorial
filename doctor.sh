@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-# AI 朝廷配置诊断脚本（doctor.sh）
+# AI 昏君配置诊断脚本（doctor.sh）
 # 检查常见配置问题，帮助排查故障
 # ============================================
 
@@ -21,7 +21,7 @@ fail() { echo -e "  ${RED}✗${NC} $1"; ((FAIL++)); }
 info() { echo -e "  ${CYAN}ℹ${NC} $1"; }
 
 echo ""
-echo -e "${BLUE}🏥 AI 朝廷配置诊断${NC}"
+echo -e "${BLUE}🏥 AI 昏君配置诊断${NC}"
 echo "================================"
 echo ""
 
@@ -63,7 +63,7 @@ elif [ -f "$HOME/.clawdbot/clawdbot.json" ]; then
 fi
 
 if [ -z "$CONFIG_FILE" ]; then
-    fail "配置文件不存在 — 请运行 $CLI_CMD onboard 或手动创建"
+    fail "配置文件不存在 — 请运行 $CLI_CMD onboard 或使用安装脚本生成模板"
     echo ""
     echo -e "${RED}配置文件缺失，后续检查无法进行${NC}"
     echo ""
@@ -165,6 +165,8 @@ else
     warn "未检测到 Agent 配置"
 fi
 
+echo -e "  ${CYAN}ℹ 推荐角色结构：掌印总管 + 内廷 + 六部 + 后宫/生活机构${NC}"
+
 # 检查 bindings
 BINDING_COUNT=$(grep -c '"agentId":' "$CONFIG_FILE" 2>/dev/null || echo 0)
 if [ "$BINDING_COUNT" -gt 0 ]; then
@@ -197,8 +199,8 @@ else
     info "运行: mkdir -p $WORKSPACE"
 fi
 
-[ -f "$WORKSPACE/SOUL.md" ] && pass "SOUL.md ✓" || warn "SOUL.md 不存在 — Agent 缺少行为准则"
-[ -f "$WORKSPACE/USER.md" ] && pass "USER.md ✓" || warn "USER.md 不存在 — Agent 不了解用户信息"
+[ -f "$WORKSPACE/SOUL.md" ] && pass "SOUL.md ✓" || warn "SOUL.md 不存在 — Agent 缺少昏君工作流行为准则"
+[ -f "$WORKSPACE/USER.md" ] && pass "USER.md ✓" || warn "USER.md 不存在 — Agent 不了解主上偏好"
 [ -d "$WORKSPACE/memory" ] && pass "memory/ ✓" || warn "memory/ 目录不存在 — 运行: mkdir -p $WORKSPACE/memory"
 
 # ---- 检测 Notion ----
@@ -214,6 +216,23 @@ if [ -f "$HOME/.config/notion/api_key" ]; then
     fi
 else
     info "Notion 未配置（可选，跳过）"
+fi
+
+# 教坊司可选能力：Suno / SeedDance
+if [ -n "${SUNO_API_URL:-}" ] && [ -n "${SUNO_KEY:-}" ]; then
+    pass "Suno 运行时环境变量已配置"
+elif [ -n "${SUNO_API_URL:-}" ] || [ -n "${SUNO_KEY:-}" ]; then
+    warn "Suno 环境变量不完整 — 需要同时提供 SUNO_API_URL 和 SUNO_KEY"
+else
+    info "Suno 未配置（教坊司生歌能力可选）"
+fi
+
+if [ -n "${SEEDDANCE_API_URL:-}" ] && [ -n "${SEEDDANCE_KEY:-}" ]; then
+    pass "SeedDance 运行时环境变量已配置"
+elif [ -n "${SEEDDANCE_API_URL:-}" ] || [ -n "${SEEDDANCE_KEY:-}" ]; then
+    warn "SeedDance 环境变量不完整 — 需要同时提供 SEEDDANCE_API_URL 和 SEEDDANCE_KEY"
+else
+    info "SeedDance 未配置（教坊司生视频能力可选）"
 fi
 
 # 检查 Gateway 服务状态

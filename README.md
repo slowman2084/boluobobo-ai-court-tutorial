@@ -4,12 +4,12 @@
 
 > **⚠️ 维权声明：** 本项目于 **2026年2月22日** 首发（[小红书推广帖更早于2月20日](https://www.xiaohongshu.com/discovery/item/6998638f000000000d0092fe?source=webshare)），是「三省六部制 × AI 多智能体」概念的原创项目。近日发现有项目在 21 小时后创建了 15/15 核心设计决策完全一致的仿品，且不注明来源。完整证据链见 [GitHub Issue](https://github.com/cft0808/edict/issues/55) | [维权文章](https://mp.weixin.qq.com/s/erVkoANrpZQFawMCNn6p9g)。我们欢迎 fork 和二次开发，但请尊重开源精神，注明出处。
 
-# 🏛️ AI 朝廷 — 当皇上需要几步？一键部署你的 AI 朝廷
+# 🛋️ AI 昏君 — 你只管摆烂，群臣自己卷起来
 
-### 30 分钟搭建 · 多 Agent 协作 · 零代码 · 古代治国智慧 × 现代 AI 管理
+### 30 分钟搭建 · 少打扰 · 多 Agent 协作 · 轻娱乐 · 内容生产
 
-> **以明朝三省六部制为蓝本，用 [OpenClaw](https://github.com/openclaw/openclaw) 框架构建的多 Agent 协作系统。**
-> 一台服务器 + OpenClaw = 一支 7×24 在线的 AI 朝廷。
+> **基于 [OpenClaw](https://github.com/openclaw/openclaw) 构建的“昏君工作流”多 Agent 系统。**
+> 你只提目标，内廷自动拆任务，六部自己执行，后宫与生活机构负责娱乐、陪伴和日常服务。
 
 <p align="center">
   <img src="https://img.shields.io/badge/架构灵感-三省六部制-gold?style=for-the-badge" />
@@ -21,13 +21,13 @@
 
 <div align="center">
 
-### 👑 一键当皇帝
+### 👑 一键当昏君
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-tutorial/main/install.sh)
 ```
 
-**一行命令，5 分钟，你就是皇上。** [→ 详细安装指南](#快速开始)
+**一行命令，5 分钟，直接进入甩手掌柜模式。** [→ 详细安装指南](#快速开始)
 
 </div>
 
@@ -67,30 +67,35 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-t
 
 ## 这个项目是什么？
 
-**AI 朝廷**是一个开箱即用的多 AI Agent 协作系统，将中国古代的**三省六部制**（中书省 · 门下省 · 尚书省 → 吏部 · 户部 · 礼部 · 兵部 · 刑部 · 工部）映射为现代 AI Agent 的组织架构。
+**AI 昏君**是一个开箱即用的多 AI Agent 协作系统，保留古代宫廷组织隐喻，但把默认工作方式从“皇帝亲自下旨调度”改成“用户只看结果、群臣自己卷”的甩手掌柜模式。
 
-**简单来说：** 你是皇帝，AI 是你的大臣。每位大臣各司其职——写代码的、管财务的、搞营销的、做运维的——你只需要在 Discord 里下一道「圣旨」（@某个 Agent），大臣们就会立刻执行。
+**简单来说：** 你不用自己盯每个部门。默认只对 `掌印总管` 说话，它会自动判断是工作、生活、娱乐还是创作需求，再把任务分给内廷、六部和后宫/生活机构。最后只把三类信息递给你：
 
-### 为什么用古代朝廷架构？
+- **已办妥**
+- **待拍板**
+- **有风险**
 
-古代三省六部制是人类历史上运行时间最久的组织管理体系之一（隋唐至清末，超过 1300 年）。它的核心设计理念：
+### 为什么做昏君工作流？
 
-- **职责分明** — 六部各司其职，互不越权（= AI Agent 各有专长）
-- **流程标准化** — 奏折制度、批红制度（= Prompt 模板 + SOUL.md 人格注入）
-- **权力制衡** — 三省互相制约（= Agent 互审、多步确认）
-- **档案留存** — 起居注、实录制度（= Memory 持久化、Notion 自动归档）
+大多数多 Agent 系统的问题不是“不能做事”，而是“太吵”。用户最后还是要自己拆任务、追进度、盯产出、记上下文，活没少干。
 
-这些思想完美映射到现代多 Agent 系统的设计需求。**古代治国的智慧，就是现代管理 AI 团队的最佳实践。**
+昏君工作流要解决的是：
+
+- **少打扰** — 能先做就先做，非必要不追问
+- **自动分诊** — 内廷负责过滤噪音和拆任务
+- **自主推进** — 六部默认先执行，再汇报结果
+- **轻娱乐** — 工作之外还能生图、生文、生歌、生视频、开小说脑洞
+- **统一入口** — 你不用自己选部门，默认只对总管交代目标
 
 ### 核心能力一览
 
 | 能力 | 描述 |
 |------|------|
-| **多 Agent 协作** | 7 个独立 AI Agent（六部 + 司礼监），各有专长，协同工作 |
+| **昏君工作流** | 默认只对 `掌印总管` 说话，内廷自动拆任务、压缩汇报 |
+| **内廷 + 六部 + 后宫/生活机构** | 工作、生活、娱乐、创作统一编排 |
 | **独立记忆** | 每个 Agent 有独立工作区和 memory 文件，越用越懂你 |
-| **60+ 内置 Skill** | GitHub、Notion、浏览器、Cron、TTS 等开箱即用 |
+| **内容生产外挂** | 可接入生图、X 文、微博、公众号、小说、歌曲、短视频能力 |
 | **自动化任务** | Cron 定时任务 + 心跳自检，7×24 无人值守 |
-| **沙箱隔离** | Docker 容器隔离，Agent 代码执行互不干扰 |
 | **多平台支持** | Discord / 飞书 / Slack / Telegram 等，@mention 即可调用 |
 | **Web 管理后台** | React + TypeScript 构建的 Dashboard，可视化管理 |
 | **OpenClaw 生态** | 基于 [OpenClaw](https://github.com/openclaw/openclaw) 框架，可使用 [OpenClaw Hub](https://github.com/openclaw/openclaw) 的 Skill 生态 |
@@ -145,10 +150,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-t
 
 ```
                           ┌─────────────────────┐
-                          │      皇帝（你）      │
+                          │   主上（你）/ Web UI  │
                           │  Discord / Web UI    │
                           └──────────┬──────────┘
-                                     │ 圣旨（@mention / DM）
+                                     │ 一句话交代目标
                                      ▼
                       ┌──────────────────────────────┐
                       │      OpenClaw Gateway         │
@@ -160,27 +165,27 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-t
                       │  │ → agentId 匹配 → 分发    │ │
                       │  │ 会话隔离 · Cron · 心跳    │ │
                       │  └─────────────────────────┘ │
-                      └──┬───┬───┬───┬───┬───┬───┬───┘
-                         │   │   │   │   │   │   │
-           ┌─────────────┘   │   │   │   │   │   └─────────────┐
-           ▼           ▼     ▼   ▼   ▼   ▼   ▼                ▼
-     ┌──────────┐  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐  ┌──────────┐
-     │ 司礼监   │  │兵部│ │户部│ │吏部│ │礼部│ │工部│  │  刑部    │
-     │ 总管调度 │  │编码│ │财务│ │管理│ │营销│ │运维│  │  法务    │
-     │ (main)   │  │    │ │    │ │    │ │    │ │    │  │          │
-     └──────────┘  └────┘ └────┘ └────┘ └────┘ └────┘  └──────────┘
-           │          │      │      │      │      │          │
-           ▼          ▼      ▼      ▼      ▼      ▼          ▼
+                      └──┬───────────┬─────────────┬─┘
+                         │           │             │
+                         ▼           ▼             ▼
+                  ┌──────────┐  ┌────────────┐  ┌──────────────┐
+                  │  内廷     │  │   六部      │  │ 后宫/生活机构 │
+                  │ 掌印总管  │  │ 兵户礼工吏刑 │  │ 内务府/教坊司等│
+                  │ 起居注官  │  │ 自主推进执行 │  │ 娱乐与生活服务 │
+                  │ 廷议官    │  │             │  │              │
+                  └────┬─────┘  └──────┬─────┘  └──────┬───────┘
+                       │               │                │
+                       ▼               ▼                ▼
      ┌───────────────────────────────────────────────────────────┐
-     │                Skill 工具层（60+ 内置）                    │
+     │                 技能与外部能力层                           │
      │  GitHub · Notion · 浏览器 · Cron · TTS · 截图             │
-     │  sessions_spawn（跨 Agent 派活）                           │
-     │  sessions_send（跨 Agent 通信）                            │
-     │  OpenClaw Hub 社区扩展 Skill                              │
+     │  baoyu-skills · webnovel-writer · Suno · SeedDance        │
+     │  sessions_spawn / sessions_send / OpenClaw Hub            │
      └───────────────────────────────────────────────────────────┘
 ```
 
-每个 Agent 绑定一个 Discord Bot 账号，由同一个 Gateway 进程统一管理：
+每个 Agent 可以绑定一个 Discord Bot 账号，由同一个 Gateway 进程统一管理：
+- **唯一默认入口**：`main` 作为掌印总管，默认先接收所有请求
 - **独立会话**：每个 Agent 有独立的会话存储（`~/.openclaw/agents/<agentId>/sessions`），互不干扰
 - **独立模型**：重活用强力模型，轻活用快速模型，省钱又高效
 - **独立沙箱**：可配置 Docker 沙箱隔离，每个 Agent 独立容器
@@ -276,7 +281,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-t
 - ✅ 4GB Swap（防 OOM）
 - ✅ Node.js 22 + GitHub CLI + Chromium
 - ✅ OpenClaw 全局安装
-- ✅ 工作区初始化（SOUL.md / IDENTITY.md / USER.md / openclaw.json 多 Agent 模板）
+- ✅ 工作区初始化（SOUL.md / IDENTITY.md / USER.md / openclaw.json 昏君版多 Agent 模板）
 - ✅ Gateway 系统服务安装（开机自启）
 
 安装脚本带彩色输出和进度提示，每一步都有 ✓ 成功标记。
@@ -295,24 +300,35 @@ bash <(curl -fsSL https://raw.githubusercontent.com/wanikua/boluobobo-ai-court-t
 
 ### 第二步：填 Key 上线（10 分钟）
 
-跑完脚本，你只需要填两样东西：
+跑完脚本，最少只需要填两样东西：
 
 1. **LLM API Key** → 你的 LLM 服务商控制台
-2. **Discord Bot Token**（每个部门一个）→ [discord.com/developers](https://discord.com/developers/applications)
+2. **Discord Bot Token**（每个角色一个）→ [discord.com/developers](https://discord.com/developers/applications)
+
+如果你要启用教坊司的歌曲 / 视频能力，还可以在运行时额外提供：
+
+```bash
+export SUNO_API_URL="https://your-suno-proxy"
+export SUNO_KEY="your-suno-key"
+export SEEDDANCE_API_URL="https://your-seeddance-proxy"
+export SEEDDANCE_KEY="your-seeddance-key"
+```
+
+这些变量**不需要写进仓库**，也**不建议提交到配置文件**。
 
 ```bash
 # 编辑配置，填入 API Key 和 Bot Token
 # 配置文件路径取决于安装的包：openclaw 用 ~/.openclaw/openclaw.json，clawdbot 用 ~/.clawdbot/clawdbot.json
 nano ~/.openclaw/openclaw.json
 
-# 启动朝廷
+# 启动昏君工作流
 systemctl --user start openclaw-gateway
 
 # 验证
 systemctl --user status openclaw-gateway
 ```
 
-在 Discord @你的 Bot 说句话，收到回复就成功了。
+在 Discord @你的掌印总管说句话，收到回复就成功了。
 
 ### 第三步：全六部上线 + 自动化（15 分钟）
 
